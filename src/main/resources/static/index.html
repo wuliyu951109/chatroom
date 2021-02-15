@@ -1,0 +1,52 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>websocket测试</title>
+    <style type="text/css">
+        h3,h4{
+            text-align:center;
+        }
+    </style>
+</head>
+<body>
+    <h3>WebSocket测试，客户端接收到的消息如下：</h3>
+    <textarea id="message" readonly="readonly" cols="150" rows="30"></textarea>
+    <input type="text" id="content"/>
+    <button id="send">发送</button>
+    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
+    <script type="text/javascript">
+        if (typeof (WebSocket) == "undefined") {
+            console.log("遗憾：您的浏览器不支持WebSocket");
+        } else {
+            const socket = new WebSocket("ws://192.168.0.181:8080/ws");
+            //收到消息事件
+            socket.onmessage = function(msg) {
+                const { data } = msg;
+                $("#message").append(data + "\n");
+            };
+            //连接打开事件
+            socket.onopen = function() {
+                console.log("Socket打开");
+            };
+            //连接关闭事件
+            socket.onclose = function() {
+                console.log("Socket关闭");
+            };
+            //发生了错误事件
+            socket.onerror = function() {
+                console.log("Socket错误");
+            };
+            //窗口关闭时，关闭连接
+            window.unload = function() {
+                socket.close();
+            };
+            $("#send").click(function(){
+                const msg = $("#content").val();
+                socket.send(msg);
+                $("#content").val("");
+            });
+        }
+    </script>
+
+</body>
+</html>
