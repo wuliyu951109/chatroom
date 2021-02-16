@@ -1,5 +1,6 @@
 package com.chatroom.server;
 
+import com.chatroom.entity.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,30 +9,44 @@ import javax.annotation.PostConstruct;
 import javax.websocket.*;
 import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @ServerEndpoint(value = "/ws")
 @Component
 public class WebSocketServer {
 
+    private static Logger log = LoggerFactory.getLogger(WebSocketServer.class);
+
+    private static final AtomicInteger onlineCount = new AtomicInteger(0);
+    // juc包的线程安全Set，用来存放每个客户端对应的Session对象。
+    private static final CopyOnWriteArraySet<Session> sessionSet = new CopyOnWriteArraySet<Session>();
+
+    private static final ConcurrentHashMap<Session, Object> sessionMap = new ConcurrentHashMap<>();
+
     @PostConstruct
     public void init() {
         log.info("websocket 加载");
     }
-    private static Logger log = LoggerFactory.getLogger(WebSocketServer.class);
-    private static final AtomicInteger OnlineCount = new AtomicInteger(0);
-    // concurrent包的线程安全Set，用来存放每个客户端对应的Session对象。
-    private static CopyOnWriteArraySet<Session> SessionSet = new CopyOnWriteArraySet<Session>();
 
     /**
      * 连接建立成功调用的方法
      */
     @OnOpen
-    public void onOpen(Session session) {
-        SessionSet.add(session);
-        OnlineCount.incrementAndGet(); // 在线数加1
-        log.info("有连接加入，当前连接数为：{}", OnlineCount.get());
+    public void onOpen(Session session) throws IOException {
+        sessionSet.add(session);
+        onlineCount.incrementAndGet(); // 在线数加1
+        List<String> sessions = sessionSet.stream().map((s) -> (s.getId())).collect(Collectors.toList());
+        sessions.remove(session);
+        HashMap<String, Object> hashMap = new HashMap<>();
+        hashMap.put("type", "list");
+        hashMap.put("content", sessions);
+        BroadCastInfo(new ObjectMapper().writeValueAsString(hashMap));
+        log.info("有连接加入，当前连接数为：{}", onlineCount.get());
     }
 
     /**
@@ -39,9 +54,9 @@ public class WebSocketServer {
      */
     @OnClose
     public void onClose(Session session) {
-        SessionSet.remove(session);
-        OnlineCount.decrementAndGet();
-        log.info("有连接关闭，当前连接数为：{}", OnlineCount.get());
+        sessionSet.remove(session);
+        onlineCount.decrementAndGet();
+        log.info("有连接关闭，当前连接数为：{}", onlineCount.get());
     }
 
     /**
@@ -59,16 +74,22 @@ public class WebSocketServer {
      * 收到客户端消息后调用的方法
      *
      * @param message
-     *            客户端发送过来的消息
+     * 客户端发送过来的消息
      */
     @OnMessage
     public void onMessage(String message, Session session) throws IOException {
-        log.info("来自客户端的消息：{}", message);
-        BroadCastInfo(message);
+        Message msg = new ObjectMapper().readValue(message, Message.class);
+        if ("all".equals(msg.getType())) {
+            BroadCastInfo(message);
+        }
+//        if ("".equals(msg.getType())) {
+//            SendMessage(message, );
+//        }
+        log.info("来自客户端的消息：{}", msg);
     }
 
     /**
-     * 发送消息，实践表明，每次浏览器刷新，session会发生变化。
+     * 发送消息。
      * @param session
      * @param message
      */
@@ -88,7 +109,7 @@ public class WebSocketServer {
      * @throws IOException
      */
     public static void BroadCastInfo(String message) {
-        for (Session session : SessionSet) {
+        for (Session session : sessionSet) {
             if(session.isOpen()){
                 SendMessage(session, message);
             }
@@ -101,9 +122,9 @@ public class WebSocketServer {
      * @param message
      * @throws IOException
      */
-    public static void SendMessage(String message,String sessionId) throws IOException {
+    public static void SendMessage(String message, String sessionId) throws IOException {
         Session session = null;
-        for (Session s : SessionSet) {
+        for (Session s : sessionSet) {
             if(s.getId().equals(sessionId)){
                 session = s;
                 break;

@@ -1,7 +1,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>websocket测试</title>
+    <title></title>
     <style type="text/css">
         h3,h4{
             text-align:center;
@@ -9,8 +9,11 @@
     </style>
 </head>
 <body>
-    <h3>WebSocket测试，客户端接收到的消息如下：</h3>
-    <textarea id="message" readonly="readonly" cols="150" rows="30"></textarea>
+    <h3 id="user"></h3>
+    <textarea id="message" readonly="readonly" cols="150" rows="20"></textarea>
+    <ul id="users">
+    </ul>
+    <h6 id="count"></h6>
     <input type="text" id="content"/>
     <button id="send">发送</button>
     <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
@@ -22,8 +25,31 @@
             //收到消息事件
             socket.onmessage = function(msg) {
                 const { data } = msg;
-                $("#message").append(data + "\n");
+                if (JSON.parse(data)["type"] === "list") {
+                    $("#users").html("");
+                    const onlineCount = JSON.parse(data)["content"].length;
+                    $("#count").html(`在线人数:${onlineCount}`);
+                    for(var i=0;i<onlineCount;i++) {
+                        const text = JSON.parse(data)["content"][i];
+                        const li = `<li>${text}</li>`;
+                        $("#users").append(li);
+                    }
+                }
+                if (JSON.parse(data)["type"] === "all") {
+                    $("#message").append(JSON.parse(data)["content"] + "\n");
+                }
             };
+            //发消息
+            $("#send").click(function(){
+                const content = $("#content").val();
+                const type = "all";
+                if ("" === content) {
+                    return;
+                }
+                const message = { content, type };
+                socket.send(JSON.stringify(message));
+                $("#content").val("");
+            });
             //连接打开事件
             socket.onopen = function() {
                 console.log("Socket打开");
@@ -40,13 +66,7 @@
             window.unload = function() {
                 socket.close();
             };
-            $("#send").click(function(){
-                const msg = $("#content").val();
-                socket.send(msg);
-                $("#content").val("");
-            });
         }
     </script>
-
 </body>
 </html>
